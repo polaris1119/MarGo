@@ -1,25 +1,79 @@
 package main
 
 import (
+	"encoding/json"
+	"errors"
 	"flag"
-	"fmt"
 	"log"
 	"net"
-	"net/http"
+	"os"
+	"os/exec"
 )
 
-func main() {
-	nett := flag.String("net", "tcp", "The class of network")
-	host := flag.String("addr", "127.0.0.1", "The host address to listen on")
-	port := flag.Int("port", 0, "The port to bind to")
-	flag.Parse()
+var (
+	methods = map[string]Method{}
+)
 
-	l, err := net.Listen(*nett, fmt.Sprintf("%s:%d", *host, *port))
+type Request map[string]string
+
+type data interface{}
+
+type Response struct {
+	Error string `json:"error"`
+	Data  data   `json:"data"`
+}
+
+type Method func(r Request) (data, error)
+
+func respond(conn net.Conn) {
+	resp := Response{}
+	r := Request{}
+	err := json.NewDecoder(conn).Decode(&r)
 	if err == nil {
-		fmt.Println(l.Addr())
-		err = http.Serve(l, nil)
+		meth := methods[r["call"]]
+		if meth == nil {
+			err = errors.New("Invalid method call `" + r["call"] + "`")
+		} else {
+			resp.Data, err = meth(r)
+		}
 	}
 	if err != nil {
-		log.Fatalf("Error: %s\n", err)
+		resp.Error = err.Error()
+	}
+	err = json.NewEncoder(conn).Encode(resp)
+	conn.Close()
+}
+
+func main() {
+	d := flag.Bool("d", false, "Whether or not to launch in the background(like a daemon)")
+	addr := flag.String("addr", "127.9.5.1:57951", "The http address to listen on")
+	flag.Parse()
+
+	if *d {
+		cmdpath, err := exec.LookPath(os.Args[0])
+		if err != nil {
+			log.Fatalln(err)
+		}
+		args := []string{os.Args[0], "-addr", *addr}
+		attr := &os.ProcAttr{Files: []*os.File{nil, nil, nil}}
+		p, err := os.StartProcess(cmdpath, args, attr)
+		if err != nil {
+			log.Fatalln(err)
+		}
+		p.Release()
+	} else {
+		l, err := net.Listen("tcp", *addr)
+		if err != nil {
+			log.Fatalln(err)
+		}
+		for {
+			conn, err := l.Accept()
+			if err != nil {
+				if nerr, ok := err.(net.Error); !ok || !nerr.Temporary() {
+					log.Fatalln(err)
+				}
+			}
+			go respond(conn)
+		}
 	}
 }

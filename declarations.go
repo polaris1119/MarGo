@@ -2,24 +2,21 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/printer"
 	"go/token"
-	"net/http"
 	"os"
-	"fmt"
 )
 
 func init() {
-	http.HandleFunc("/declarations", func(rw http.ResponseWriter, req *http.Request) {
-		m := map[string]interface{}{}
+	methods["declarations"] = func(r Request) (data, error) {
 		decls := []map[string]interface{}{}
 		fset := token.NewFileSet()
 		var err error
-		fn := req.FormValue("filename")
-		var src interface{} = req.FormValue("src")
+		fn := r["filename"]
+		var src interface{} = r["src"]
 		if src.(string) == "" {
 			src, err = os.Open(fn)
 		}
@@ -103,11 +100,6 @@ func init() {
 				}
 			}
 		}
-
-		m["declarations"] = decls
-		if err != nil {
-			m["error"] = "Error: `" + err.Error()
-		}
-		json.NewEncoder(rw).Encode(m)
-	})
+		return decls, err
+	}
 }
