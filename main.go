@@ -46,7 +46,7 @@ func respond(conn net.Conn) {
 
 func main() {
 	d := flag.Bool("d", false, "Whether or not to launch in the background(like a daemon)")
-	addr := flag.String("addr", "127.9.5.1:57951", "The http address to listen on")
+	addr := flag.String("addr", "127.9.5.1:57951", "The tcp address to listen on")
 	flag.Parse()
 
 	if *d {
