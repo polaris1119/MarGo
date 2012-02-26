@@ -8,11 +8,13 @@ import (
 )
 
 func init() {
-	methods["import_paths"] = func(r Request) (data, error) {
+	methods["import_paths"] = func(r *Request) (data, error) {
 		imports := []string{}
 		paths := map[string]bool{}
 
 		env := []string{
+			r.Env["GOPATH"],
+			r.Env["GOROOT"],
 			os.Getenv("GOPATH"),
 			os.Getenv("GOROOT"),
 			runtime.GOROOT(),

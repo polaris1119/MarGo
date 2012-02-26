@@ -5,7 +5,7 @@ import (
 )
 
 func init() {
-	methods["env"] = func(r Request) (data, error) {
+	methods["env"] = func(r *Request) (data, error) {
 		return os.Environ(), nil
 	}
 }

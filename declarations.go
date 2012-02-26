@@ -11,12 +11,12 @@ import (
 )
 
 func init() {
-	methods["declarations"] = func(r Request) (data, error) {
+	methods["declarations"] = func(r *Request) (data, error) {
 		decls := []map[string]interface{}{}
 		fset := token.NewFileSet()
 		var err error
-		fn := r["filename"]
-		var src interface{} = r["src"]
+		fn := r.Args.Filename
+		var src interface{} = r.Args.Src
 		if src.(string) == "" {
 			src, err = os.Open(fn)
 		}
