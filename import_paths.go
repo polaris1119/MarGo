@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -38,6 +39,7 @@ func init() {
 					if e == nil && sfx(p, ".a") {
 						p := p[:len(p)-2]
 						if !pfx(p, ".") && !pfx(p, "_") && !sfx(p, "_test") {
+							p = path.Clean(filepath.ToSlash(p))
 							imports = append(imports, p)
 						}
 					}
