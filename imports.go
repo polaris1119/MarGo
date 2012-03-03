@@ -1,7 +1,5 @@
 package main
 
-// x
-
 import (
 	"bytes"
 
@@ -11,10 +9,6 @@ import (
 	"go/token"
 	"strings"
 )
-
-// y
-
-// z
 
 type ImportDecl struct {
 	Name string `json:"name"`
@@ -34,9 +28,6 @@ type ImportsArgs struct {
 	ImportPaths bool              `json:"import_paths"`
 	Toggle      []ImportDecl      `json:"toggle"`
 	Env         map[string]string `json:"env"`
-}
-
-type ImportsFilter struct {
 }
 
 func unquote(s string) string {
@@ -90,30 +81,28 @@ func init() {
 			}
 
 			var first *ast.GenDecl
-			if len(toggle) > 0 {
-				for j := 0; j < len(af.Decls); j += 1 {
-					d := af.Decls[j]
-					if decl, ok := d.(*ast.GenDecl); ok {
-						if decl.Tok == token.IMPORT {
-							for i := 0; i < len(decl.Specs); i += 1 {
-								if sp, ok := decl.Specs[i].(*ast.ImportSpec); ok {
-									id := ImportDecl{Path: unquote(sp.Path.Value)}
-									if sp.Name != nil {
-										id.Name = sp.Name.String()
-									}
-									if _, ok := toggle[id]; ok {
-										delete(toggle, id)
-										decl.Specs = append(decl.Specs[:i], decl.Specs[i+1:]...)
-									} else {
-										res.FileImports = append(res.FileImports, id)
-									}
+			for j := 0; j < len(af.Decls); j += 1 {
+				d := af.Decls[j]
+				if decl, ok := d.(*ast.GenDecl); ok {
+					if decl.Tok == token.IMPORT {
+						for i := 0; i < len(decl.Specs); i += 1 {
+							if sp, ok := decl.Specs[i].(*ast.ImportSpec); ok {
+								id := ImportDecl{Path: unquote(sp.Path.Value)}
+								if sp.Name != nil {
+									id.Name = sp.Name.String()
+								}
+								if _, ok := toggle[id]; ok {
+									delete(toggle, id)
+									decl.Specs = append(decl.Specs[:i], decl.Specs[i+1:]...)
+								} else {
+									res.FileImports = append(res.FileImports, id)
 								}
 							}
-							if len(decl.Specs) == 0 && decl.Lparen == token.NoPos {
-								af.Decls = append(af.Decls[:j], af.Decls[j+1:]...)
-							} else if first == nil {
-								first = decl
-							}
+						}
+						if len(decl.Specs) == 0 && decl.Lparen == token.NoPos {
+							af.Decls = append(af.Decls[:j], af.Decls[j+1:]...)
+						} else if first == nil {
+							first = decl
 						}
 					}
 				}
