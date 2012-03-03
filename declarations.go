@@ -7,25 +7,33 @@ import (
 	"go/parser"
 	"go/printer"
 	"go/token"
-	"os"
 )
 
+type DeclarationsArgs struct {
+	Fn  string `json:"filename"`
+	Src string `json:"src"`
+}
+
 func init() {
-	methods["declarations"] = func(r *Request) (data, error) {
+	methods["declarations"] = func(r Request) (data, error) {
+		a := DeclarationsArgs{}
 		decls := []map[string]interface{}{}
+		if err := r.Decode(&a); err != nil {
+			return decls, err
+		}
+
 		fset := token.NewFileSet()
 		var err error
-		fn := r.Args.Filename
-		var src interface{} = r.Args.Src
-		if src.(string) == "" {
-			src, err = os.Open(fn)
+		var src interface{}
+		if a.Src != "" {
+			src = a.Src
 		}
 		if err == nil {
-			if fn == "" {
-				fn = "<stdin>"
+			if a.Fn == "" {
+				a.Fn = "<stdin>"
 			}
 			var af *ast.File
-			af, err = parser.ParseFile(fset, fn, src, 0)
+			af, err = parser.ParseFile(fset, a.Fn, src, 0)
 			if af != nil {
 				for _, d := range af.Decls {
 					if p := fset.Position(d.Pos()); p.IsValid() {

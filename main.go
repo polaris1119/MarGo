@@ -1,11 +1,16 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"io"
 	"io/ioutil"
 	"log"
 	"net"
@@ -17,15 +22,8 @@ var (
 	methods = map[string]Method{}
 )
 
-type Request struct {
-	Method string            `json:"method"`
-	Env    map[string]string `json:"env"`
-	Args   Args              `json:"args"`
-}
-
-type Args struct {
-	Filename string `json:"filename"`
-	Src      string `json:"src"`
+type Header struct {
+	Method string `json:"method"`
 }
 
 type data interface{}
@@ -35,34 +33,61 @@ type Response struct {
 	Data  data   `json:"data"`
 }
 
-type Method func(r *Request) (data, error)
+type Request struct {
+	*bufio.Reader
+}
+
+func (r Request) Decode(a interface{}) error {
+	if err := json.NewDecoder(r).Decode(a); err != io.EOF {
+		return err
+	}
+	return nil
+}
+
+func parseAstFile(fn string, s string, mode parser.Mode) (fset *token.FileSet, af *ast.File, err error) {
+	fset = token.NewFileSet()
+	var src interface{}
+	if s != "" {
+		src = s
+	}
+	if fn == "" {
+		fn = "<stdin>"
+	}
+	af, err = parser.ParseFile(fset, fn, src, mode)
+	return
+}
+
+type Method func(r Request) (data, error)
 
 func respond(conn net.Conn) {
+	h := Header{}
+	r := Request{bufio.NewReader(conn)}
 	resp := Response{}
-	r := &Request{
-		Env: map[string]string{},
-	}
-	err := json.NewDecoder(conn).Decode(&r)
+	line, err := r.ReadSlice('\r')
 	if err == nil {
-
-		if r.Method != "exit" {
-
-			meth := methods[r.Method]
-			if meth == nil {
-				err = errors.New("Invalid method call `" + r.Method + "`")
-			} else {
-				resp.Data, err = meth(r)
+		err = json.Unmarshal(line, &h)
+		if err == nil {
+			if h.Method != "exit" {
+				meth := methods[h.Method]
+				if meth == nil {
+					err = errors.New("Invalid method call `" + h.Method + "`")
+				} else {
+					resp.Data, err = meth(r)
+				}
 			}
 		}
+
+		if err != nil {
+			resp.Error = err.Error()
+		}
+	} else {
+		resp.Error = "Invalid Request Header: " + err.Error()
 	}
 
-	if err != nil {
-		resp.Error = err.Error()
-	}
-	err = json.NewEncoder(conn).Encode(resp)
+	json.NewEncoder(conn).Encode(resp)
 	conn.Close()
 
-	if r.Method == "exit" {
+	if h.Method == "exit" {
 		os.Exit(0)
 	}
 }
@@ -104,6 +129,10 @@ func main() {
 			os.Stdout.Close()
 			os.Stderr.Close()
 		}
+
+		go func() {
+			importPaths(map[string]string{})
+		}()
 
 		for {
 			conn, err := l.Accept()

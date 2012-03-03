@@ -1,7 +1,9 @@
 package main
 
 func init() {
-	methods["hello"] = func(r *Request) (data, error) {
-		return r, nil
+	methods["hello"] = func(r Request) (data, error) {
+		var a data
+		err := r.Decode(&a)
+		return a, err
 	}
 }
