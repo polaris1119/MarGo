@@ -4,9 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"go/ast"
-	"go/parser"
 	"go/printer"
-	"go/token"
 )
 
 type DeclarationsArgs struct {
@@ -15,26 +13,18 @@ type DeclarationsArgs struct {
 }
 
 func init() {
-	methods["declarations"] = func(r Request) (data, error) {
-		a := DeclarationsArgs{}
-		decls := []map[string]interface{}{}
-		if err := r.Decode(&a); err != nil {
-			return decls, err
-		}
-
-		fset := token.NewFileSet()
-		var err error
-		var src interface{}
-		if a.Src != "" {
-			src = a.Src
-		}
-		if err == nil {
-			if a.Fn == "" {
-				a.Fn = "<stdin>"
+	act(Action{
+		Path: "/declarations",
+		Doc:  "",
+		Func: func(r Request) (data, error) {
+			a := DeclarationsArgs{}
+			decls := []map[string]interface{}{}
+			if err := r.Decode(&a); err != nil {
+				return decls, err
 			}
-			var af *ast.File
-			af, err = parser.ParseFile(fset, a.Fn, src, 0)
-			if af != nil {
+
+			fset, af, err := parseAstFile(a.Fn, a.Src, 0)
+			if err == nil {
 				for _, d := range af.Decls {
 					if p := fset.Position(d.Pos()); p.IsValid() {
 						switch n := d.(type) {
@@ -107,7 +97,7 @@ func init() {
 					}
 				}
 			}
-		}
-		return decls, err
-	}
+			return decls, err
+		},
+	})
 }

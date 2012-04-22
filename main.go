@@ -1,29 +1,50 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"io"
 	"io/ioutil"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
+	"path"
+	"strings"
+	"sync"
 )
+
+type NoInputErr string
+
+func (s NoInputErr) Error() string {
+	return string(s)
+}
 
 var (
-	methods = map[string]Method{}
+	actions = map[string]Action{}
+	acLck   = sync.Mutex{}
 )
 
-type Header struct {
-	Method string `json:"method"`
+func act(ac Action) {
+	ac.Path = normPath(ac.Path)
+	acLck.Lock()
+	if _, exists := actions[ac.Path]; exists {
+		log.Fatalf("Action exists: %s\n", ac.Path)
+	}
+	if ac.Func == nil {
+		log.Fatalf("Invalid action: %s\n", ac.Path)
+	}
+	actions[ac.Path] = ac
+	defer acLck.Unlock()
+}
+
+func normPath(p string) string {
+	return path.Clean("/" + strings.ToLower(strings.TrimSpace(p)))
 }
 
 type data interface{}
@@ -34,14 +55,16 @@ type Response struct {
 }
 
 type Request struct {
-	*bufio.Reader
+	Rw  http.ResponseWriter
+	Req *http.Request
 }
 
 func (r Request) Decode(a interface{}) error {
-	if err := json.NewDecoder(r).Decode(a); err != io.EOF {
-		return err
+	data := []byte(r.Req.FormValue("data"))
+	if len(data) == 0 {
+		return NoInputErr("Data is empty")
 	}
-	return nil
+	return json.Unmarshal(data, a)
 }
 
 func parseAstFile(fn string, s string, mode parser.Mode) (fset *token.FileSet, af *ast.File, err error) {
@@ -57,38 +80,40 @@ func parseAstFile(fn string, s string, mode parser.Mode) (fset *token.FileSet, a
 	return
 }
 
-type Method func(r Request) (data, error)
+type Action struct {
+	Path string
+	Doc  string
+	Func func(r Request) (data, error)
+}
 
-func respond(conn net.Conn) {
-	h := Header{}
-	r := Request{bufio.NewReader(conn)}
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func serve(rw http.ResponseWriter, req *http.Request) {
+	rw.Header().Set("Content-Type", "application/json; charset=utf-8")
+	r := Request{
+		Rw:  rw,
+		Req: req,
+	}
+	path := normPath(req.URL.Path)
 	resp := Response{}
-	line, err := r.ReadSlice('\r')
-	if err == nil {
-		err = json.Unmarshal(line, &h)
-		if err == nil {
-			if h.Method != "exit" {
-				meth := methods[h.Method]
-				if meth == nil {
-					err = errors.New("Invalid method call `" + h.Method + "`")
-				} else {
-					resp.Data, err = meth(r)
-				}
-			}
-		}
 
+	defer func() {
+		json.NewEncoder(rw).Encode(resp)
+	}()
+
+	if ac, ok := actions[path]; ok {
+		var err error
+		resp.Data, err = ac.Func(r)
 		if err != nil {
 			resp.Error = err.Error()
 		}
 	} else {
-		resp.Error = "Invalid Request Header: " + err.Error()
-	}
-
-	json.NewEncoder(conn).Encode(resp)
-	conn.Close()
-
-	if h.Method == "exit" {
-		os.Exit(0)
+		resp.Error = "Invalid action: " + path
 	}
 }
 
@@ -134,14 +159,9 @@ func main() {
 			importPaths(map[string]string{})
 		}()
 
-		for {
-			conn, err := l.Accept()
-			if err != nil {
-				if nerr, ok := err.(net.Error); !ok || !nerr.Temporary() {
-					log.Fatalln(err)
-				}
-			}
-			go respond(conn)
+		err = http.Serve(l, http.HandlerFunc(serve))
+		if err != nil {
+			log.Fatalln(err)
 		}
 	}
 }

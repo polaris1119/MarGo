@@ -42,9 +42,6 @@ func importPaths(environ map[string]string) ([]string, error) {
 						imports = append(imports, p)
 					}
 				}
-				if e != nil {
-					println(e.Error())
-				}
 			}
 			return nil
 		}
