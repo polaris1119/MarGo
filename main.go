@@ -120,7 +120,7 @@ func serve(rw http.ResponseWriter, req *http.Request) {
 func main() {
 	d := flag.Bool("d", false, "Whether or not to launch in the background(like a daemon)")
 	closeFds := flag.Bool("close-fds", false, "Whether or not to close stdin, stdout and stderr")
-	addr := flag.String("addr", "127.9.5.1:57951", "The tcp address to listen on")
+	addr := flag.String("addr", "127.0.0.1:57951", "The tcp address to listen on")
 	flag.Parse()
 
 	if *d {
