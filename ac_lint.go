@@ -6,20 +6,20 @@ import (
 )
 
 type AcLintArgs struct {
-	Fn	string	`json:"fn"`
-	Src	string	`json:"src"`
+	Fn  string `json:"fn"`
+	Src string `json:"src"`
 }
 
 type AcLintReport struct {
-	Row	int	`json:"row"`
-	Col	int	`json:"col"`
-	Msg	string	`json:"msg"`
+	Row int    `json:"row"`
+	Col int    `json:"col"`
+	Msg string `json:"msg"`
 }
 
 func init() {
 	act(Action{
-		Path:	"/lint",
-		Doc:	``,
+		Path: "/lint",
+		Doc:  ``,
 		Func: func(r Request) (data, error) {
 			a := AcLintArgs{}
 			res := make([]AcLintReport, 0)
@@ -33,9 +33,9 @@ func init() {
 				if el, ok := err.(scanner.ErrorList); ok {
 					for _, e := range el {
 						res = append(res, AcLintReport{
-							Row:	e.Pos.Line - 1,
-							Col:	e.Pos.Column - 1,
-							Msg:	e.Msg,
+							Row: e.Pos.Line - 1,
+							Col: e.Pos.Column - 1,
+							Msg: e.Msg,
 						})
 					}
 				}
