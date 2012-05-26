@@ -26,8 +26,8 @@ func (s NoInputErr) Error() string {
 }
 
 var (
-	actions	= map[string]Action{}
-	acLck	= sync.Mutex{}
+	actions = map[string]Action{}
+	acLck   = sync.Mutex{}
 )
 
 func act(ac Action) {
@@ -50,13 +50,13 @@ func normPath(p string) string {
 type data interface{}
 
 type Response struct {
-	Error	string	`json:"error"`
-	Data	data	`json:"data"`
+	Error string `json:"error"`
+	Data  data   `json:"data"`
 }
 
 type Request struct {
-	Rw	http.ResponseWriter
-	Req	*http.Request
+	Rw  http.ResponseWriter
+	Req *http.Request
 }
 
 func (r Request) Decode(a interface{}) error {
@@ -81,9 +81,9 @@ func parseAstFile(fn string, s string, mode parser.Mode) (fset *token.FileSet, a
 }
 
 type Action struct {
-	Path	string
-	Doc	string
-	Func	func(r Request) (data, error)
+	Path string
+	Doc  string
+	Func func(r Request) (data, error)
 }
 
 func maxInt(a, b int) int {
@@ -96,8 +96,8 @@ func maxInt(a, b int) int {
 func serve(rw http.ResponseWriter, req *http.Request) {
 	rw.Header().Set("Content-Type", "application/json; charset=utf-8")
 	r := Request{
-		Rw:	rw,
-		Req:	req,
+		Rw:  rw,
+		Req: req,
 	}
 	path := normPath(req.URL.Path)
 	resp := Response{}
