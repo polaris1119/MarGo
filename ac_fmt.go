@@ -29,7 +29,11 @@ formats the source like gofmt does
 			fset, af, err := parseAstFile(a.Fn, a.Src, parser.ParseComments)
 			if err == nil {
 				buf := &bytes.Buffer{}
-				if err = printer.Fprint(buf, fset, af); err == nil {
+				p := &printer.Config{
+					Mode:     printer.UseSpaces | printer.TabIndent,
+					Tabwidth: 8,
+				}
+				if err = p.Fprint(buf, fset, af); err == nil {
 					res = buf.String()
 				}
 			}
