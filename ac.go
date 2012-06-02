@@ -2,9 +2,7 @@ package main
 
 import (
 	"log"
-	"os"
 	"strings"
-	"time"
 )
 
 func init() {
@@ -22,11 +20,11 @@ additionally, if data is "bye ni" MarGo will exit
 				err = nil
 			}
 			if strings.TrimSpace(strings.ToLower(a)) == "bye ni" {
-				go func() {
-					time.Sleep(1 * time.Second)
-					log.Println("exiting...")
-					os.Exit(0)
-				}()
+				acLck.Lock()
+				defer acLck.Unlock()
+				acQuitting = true
+				acListener.Close()
+				log.Println("bye ni")
 			}
 			m := map[string]string{}
 			for path, ac := range actions {

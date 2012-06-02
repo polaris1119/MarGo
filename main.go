@@ -26,13 +26,17 @@ func (s NoInputErr) Error() string {
 }
 
 var (
-	actions = map[string]Action{}
-	acLck   = sync.Mutex{}
+	actions    = map[string]Action{}
+	acLck      = sync.Mutex{}
+	acQuitting = false
+	acWg       = sync.WaitGroup{}
+	acListener net.Listener
 )
 
 func act(ac Action) {
 	ac.Path = normPath(ac.Path)
 	acLck.Lock()
+	defer acLck.Unlock()
 	if _, exists := actions[ac.Path]; exists {
 		log.Fatalf("Action exists: %s\n", ac.Path)
 	}
@@ -40,7 +44,6 @@ func act(ac Action) {
 		log.Fatalf("Invalid action: %s\n", ac.Path)
 	}
 	actions[ac.Path] = ac
-	defer acLck.Unlock()
 }
 
 func normPath(p string) string {
@@ -94,6 +97,9 @@ func maxInt(a, b int) int {
 }
 
 func serve(rw http.ResponseWriter, req *http.Request) {
+	acWg.Add(1)
+	defer acWg.Done()
+
 	rw.Header().Set("Content-Type", "application/json; charset=utf-8")
 	r := Request{
 		Rw:  rw,
@@ -121,7 +127,18 @@ func main() {
 	d := flag.Bool("d", false, "Whether or not to launch in the background(like a daemon)")
 	closeFds := flag.Bool("close-fds", false, "Whether or not to close stdin, stdout and stderr")
 	addr := flag.String("addr", "127.0.0.1:57951", "The tcp address to listen on")
+	quit := flag.Bool("quit", false, "Request that an existing instance of MarGo listening on *addr* quit")
+	replace := flag.Bool("replace", false, "Request that an existing instance of MarGo listening on *addr* quit and then start listening on *addr*")
 	flag.Parse()
+
+	if *quit || *replace {
+		if resp, err := http.Get(`http://` + *addr + `/?data="bye%20ni"`); err == nil {
+			resp.Body.Close()
+		}
+		if *quit {
+			return
+		}
+	}
 
 	if *d {
 		cmd := exec.Command(os.Args[0], "-close-fds", "-addr", *addr)
@@ -143,12 +160,13 @@ func main() {
 			cmd.Process.Kill()
 		}
 	} else {
-		l, err := net.Listen("tcp", *addr)
+		var err error
+		acListener, err = net.Listen("tcp", *addr)
 		if err != nil {
 			log.Fatalln(err)
 		}
 
-		fmt.Fprintf(os.Stderr, "addr: http://%s\n", l.Addr())
+		fmt.Fprintf(os.Stderr, "addr: http://%s\n", acListener.Addr())
 		if *closeFds {
 			os.Stdin.Close()
 			os.Stdout.Close()
@@ -159,9 +177,10 @@ func main() {
 			importPaths(map[string]string{})
 		}()
 
-		err = http.Serve(l, http.HandlerFunc(serve))
-		if err != nil {
+		err = http.Serve(acListener, http.HandlerFunc(serve))
+		if !acQuitting && err != nil {
 			log.Fatalln(err)
 		}
+		acWg.Wait()
 	}
 }
