@@ -67,11 +67,7 @@ func init() {
 
 			fset, af, err := parseAstFile(a.Fn, a.Src, parser.ImportsOnly|parser.ParseComments)
 			if err == nil {
-
-				// ast.Print(fset, af)
-
 				tf := fset.File(af.Pos())
-				fmt.Println(tf.LineCount())
 				res.LineCountRef = tf.LineCount()
 
 				for _, v := range af.Decls {
