@@ -2,15 +2,12 @@ package main
 
 import (
 	"bytes"
-	"fmt"
-	"go/ast" // parse...
+	"go/ast"
 	"go/parser"
 	"go/printer"
 	"go/token"
 	"strings"
 )
-
-/* comment */
 
 type ImportDecl struct {
 	Name string `json:"name"`
