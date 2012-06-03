@@ -59,7 +59,7 @@ func init() {
 
 			for _, im := range af.Imports {
 				if im.Name != nil && parts[0] == im.Name.Name {
-					pkgPath = im.Path.Value
+					pkgPath = unquote(im.Path.Value)
 					break
 				}
 			}
