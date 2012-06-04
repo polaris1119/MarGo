@@ -123,25 +123,45 @@ func serve(rw http.ResponseWriter, req *http.Request) {
 	}
 }
 
+func sendQuit(addr string) {
+	if resp, err := http.Get(`http://` + addr + `/?data="bye%20ni"`); err == nil {
+		resp.Body.Close()
+	}
+}
+
 func main() {
+	defaultAddr := "127.0.0.1:57951"
+
 	d := flag.Bool("d", false, "Whether or not to launch in the background(like a daemon)")
 	closeFds := flag.Bool("close-fds", false, "Whether or not to close stdin, stdout and stderr")
-	addr := flag.String("addr", "127.0.0.1:57951", "The tcp address to listen on")
-	quit := flag.Bool("quit", false, "Request that an existing instance of MarGo listening on *addr* quit")
-	replace := flag.Bool("replace", false, "Request that an existing instance of MarGo listening on *addr* quit and then start listening on *addr*")
+	addr := flag.String("addr", defaultAddr, "The tcp address to listen on")
+	call := flag.String("call", "",
+		"Call the specified command:"+
+			"\n\t\tquit:    send a quit signal to *addr* (equivalent to the GET request: http://*addr*/?data=\"bye ni\")"+
+			"\n\t\treplace: send a quit signal to *addr* then startup as normal")
 	flag.Parse()
 
-	if *quit || *replace {
-		if resp, err := http.Get(`http://` + *addr + `/?data="bye%20ni"`); err == nil {
-			resp.Body.Close()
-		}
-		if *quit {
-			return
-		}
+	switch *call {
+	case "":
+		// startup as normal
+	case "quit":
+		sendQuit(*addr)
+		return
+	case "replace":
+		// handled below
+	case "default-addr":
+		fmt.Println(defaultAddr)
+		return
+	default:
+		log.Fatalf("invalid call: expected one of `quit, replace, default-addr', got `%s'\n", *call)
 	}
 
 	if *d {
-		cmd := exec.Command(os.Args[0], "-close-fds", "-addr", *addr)
+		cmd := exec.Command(os.Args[0],
+			"-close-fds",
+			"-addr", *addr,
+			"-call", *call,
+		)
 		serr, err := cmd.StderrPipe()
 		if err != nil {
 			log.Fatalln(err)
@@ -160,6 +180,10 @@ func main() {
 			cmd.Process.Kill()
 		}
 	} else {
+		if *call == "replace" {
+			sendQuit(*addr)
+		}
+
 		var err error
 		acListener, err = net.Listen("tcp", *addr)
 		if err != nil {
