@@ -137,8 +137,10 @@ func main() {
 	addr := flag.String("addr", defaultAddr, "The tcp address to listen on")
 	call := flag.String("call", "",
 		"Call the specified command:"+
-			"\n\t\tquit:    send a quit signal to *addr* (equivalent to the GET request: http://*addr*/?data=\"bye ni\")"+
-			"\n\t\treplace: send a quit signal to *addr* then startup as normal")
+			"\n\t\tdefault-addr: output the default address"+
+			"\n\t\tquit:         send a quit signal to *addr* (equivalent to the GET request: http://*addr*/?data=\"bye ni\")"+
+			"\n\t\treplace:      send a quit signal to *addr* then startup as normal"+
+			"")
 	flag.Parse()
 
 	switch *call {
