@@ -7,8 +7,10 @@ import (
 )
 
 type AcFmtArgs struct {
-	Fn  string `json:"fn"`
-	Src string `json:"src"`
+	Fn        string `json:"fn"`
+	Src       string `json:"src"`
+	TabIndent bool   `json:"tab_indent"`
+	TabWidth  int    `json:"tab_width"`
 }
 
 func init() {
@@ -20,7 +22,11 @@ formats the source like gofmt does
 @resp: "formatted source"
 `,
 		Func: func(r Request) (data, error) {
-			a := AcFmtArgs{}
+			a := AcFmtArgs{
+				TabIndent: true,
+				TabWidth:  8,
+			}
+
 			res := ""
 			if err := r.Decode(&a); err != nil {
 				return res, err
@@ -29,9 +35,13 @@ formats the source like gofmt does
 			fset, af, err := parseAstFile(a.Fn, a.Src, parser.ParseComments)
 			if err == nil {
 				buf := &bytes.Buffer{}
+				mode := printer.UseSpaces
+				if a.TabIndent {
+					mode |= printer.TabIndent
+				}
 				p := &printer.Config{
-					Mode:     printer.UseSpaces | printer.TabIndent,
-					Tabwidth: 8,
+					Mode:     mode,
+					Tabwidth: a.TabWidth,
 				}
 				if err = p.Fprint(buf, fset, af); err == nil {
 					res = buf.String()
