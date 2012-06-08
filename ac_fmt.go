@@ -1,9 +1,7 @@
 package main
 
 import (
-	"bytes"
 	"go/parser"
-	"go/printer"
 )
 
 type AcFmtArgs struct {
@@ -34,18 +32,7 @@ formats the source like gofmt does
 
 			fset, af, err := parseAstFile(a.Fn, a.Src, parser.ParseComments)
 			if err == nil {
-				buf := &bytes.Buffer{}
-				mode := printer.UseSpaces
-				if a.TabIndent {
-					mode |= printer.TabIndent
-				}
-				p := &printer.Config{
-					Mode:     mode,
-					Tabwidth: a.TabWidth,
-				}
-				if err = p.Fprint(buf, fset, af); err == nil {
-					res = buf.String()
-				}
+				res, err = printSrc(fset, af, a.TabIndent, a.TabWidth)
 			}
 			return res, err
 		},
