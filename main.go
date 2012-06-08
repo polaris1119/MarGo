@@ -3,10 +3,12 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"go/ast"
 	"go/parser"
+	"go/printer"
 	"go/token"
 	"io/ioutil"
 	"log"
@@ -83,10 +85,12 @@ func parseAstFile(fn string, s string, mode parser.Mode) (fset *token.FileSet, a
 	return
 }
 
+type ActionFunc func(r Request) (data, error)
+
 type Action struct {
 	Path string
 	Doc  string
-	Func func(r Request) (data, error)
+	Func ActionFunc
 }
 
 func maxInt(a, b int) int {
@@ -94,6 +98,17 @@ func maxInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func callAction(ac Action, r Request) (res data, err error) {
+	defer func() {
+		if e := recover(); e != nil {
+			res = nil
+			err = errors.New(fmt.Sprintf("margo%s panic: %s", ac.Path, e))
+		}
+	}()
+	res, err = ac.Func(r)
+	return
 }
 
 func serve(rw http.ResponseWriter, req *http.Request) {
@@ -114,7 +129,7 @@ func serve(rw http.ResponseWriter, req *http.Request) {
 
 	if ac, ok := actions[path]; ok {
 		var err error
-		resp.Data, err = ac.Func(r)
+		resp.Data, err = callAction(ac, r)
 		if err != nil {
 			resp.Error = err.Error()
 		}
@@ -127,6 +142,26 @@ func sendQuit(addr string) {
 	if resp, err := http.Get(`http://` + addr + `/?data="bye%20ni"`); err == nil {
 		resp.Body.Close()
 	}
+}
+
+func newPrinter(tabIndent bool, tabWidth int) *printer.Config {
+	mode := printer.UseSpaces
+	if tabIndent {
+		mode |= printer.TabIndent
+	}
+	return &printer.Config{
+		Mode:     mode,
+		Tabwidth: tabWidth,
+	}
+}
+
+func printSrc(fset *token.FileSet, v interface{}, tabIndent bool, tabWidth int) (src string, err error) {
+	p := newPrinter(tabIndent, tabWidth)
+	buf := &bytes.Buffer{}
+	if err = p.Fprint(buf, fset, v); err == nil {
+		src = buf.String()
+	}
+	return
 }
 
 func main() {
