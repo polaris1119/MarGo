@@ -19,9 +19,8 @@ type ImportDeclArg struct {
 }
 
 type ImportsResult struct {
-	Imports []ImportDecl `json:"imports"`
-	Src     string       `json:"src"`
-	LineRef int          `json:"line_ref"`
+	Src     string `json:"src"`
+	LineRef int    `json:"line_ref"`
 }
 
 type ImportsArgs struct {
@@ -45,9 +44,7 @@ func init() {
 		Path: "/imports",
 		Doc:  "",
 		Func: func(r Request) (data, error) {
-			res := ImportsResult{
-				Imports: []ImportDecl{},
-			}
+			res := ImportsResult{}
 
 			a := ImportsArgs{
 				Toggle:    []ImportDeclArg{},
@@ -66,7 +63,7 @@ func init() {
 				} else {
 					res.LineRef = fset.Position(af.Package).Line
 				}
-				af, res.Imports = imp(fset, af, a.Toggle)
+				af = imp(fset, af, a.Toggle)
 				res.Src, err = printSrc(fset, af, a.TabIndent, a.TabWidth)
 			}
 			return res, err
@@ -74,7 +71,7 @@ func init() {
 	})
 }
 
-func imp(fset *token.FileSet, af *ast.File, toggle []ImportDeclArg) (*ast.File, []ImportDecl) {
+func imp(fset *token.FileSet, af *ast.File, toggle []ImportDeclArg) *ast.File {
 	add := map[ImportDecl]bool{}
 	del := map[ImportDecl]bool{}
 	for _, sda := range toggle {
@@ -172,9 +169,5 @@ func imp(fset *token.FileSet, af *ast.File, toggle []ImportDeclArg) (*ast.File, 
 	af.Decls = af.Decls[:dj]
 
 	ast.SortImports(fset, af)
-	res := []ImportDecl{}
-	for sd, _ := range imports {
-		res = append(res, sd)
-	}
-	return af, res
+	return af
 }
