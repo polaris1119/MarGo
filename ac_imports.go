@@ -63,9 +63,11 @@ func init() {
 			if err == nil {
 				if len(af.Decls) > 0 {
 					res.LineRef = fset.Position(af.Decls[len(af.Decls)-1].End()).Line
-					af, res.Imports = imp(fset, af, a.Toggle)
-					res.Src, err = printSrc(fset, af, a.TabIndent, a.TabWidth)
+				} else {
+					res.LineRef = fset.Position(af.Package).Line
 				}
+				af, res.Imports = imp(fset, af, a.Toggle)
+				res.Src, err = printSrc(fset, af, a.TabIndent, a.TabWidth)
 			}
 			return res, err
 		},
