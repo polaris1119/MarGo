@@ -58,11 +58,15 @@ func init() {
 
 			fset, af, err := parseAstFile(a.Fn, a.Src, parser.ImportsOnly|parser.ParseComments)
 			if err == nil {
-				if len(af.Decls) > 0 {
-					res.LineRef = fset.Position(af.Decls[len(af.Decls)-1].End()).Line
-				} else {
-					res.LineRef = fset.Position(af.Package).Line
-				}
+				ast.Inspect(af, func(n ast.Node) bool {
+					if n != nil {
+						tp := fset.Position(n.End())
+						if tp.Line > res.LineRef {
+							res.LineRef = tp.Line
+						}
+					}
+					return true
+				})
 				af = imp(fset, af, a.Toggle)
 				res.Src, err = printSrc(fset, af, a.TabIndent, a.TabWidth)
 			}
