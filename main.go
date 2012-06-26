@@ -17,6 +17,8 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 )
@@ -160,6 +162,71 @@ func printSrc(fset *token.FileSet, v interface{}, tabIndent bool, tabWidth int) 
 	buf := &bytes.Buffer{}
 	if err = p.Fprint(buf, fset, v); err == nil {
 		src = buf.String()
+	}
+	return
+}
+
+func rootDirs(env map[string]string) []string {
+	const pathSep = string(os.PathListSeparator)
+
+	dirs := []string{}
+	gopath := ""
+	if len(env) == 0 {
+		gopath = os.Getenv("GOPATH")
+	} else {
+		gopath = env["GOPATH"]
+	}
+
+	for _, fn := range strings.Split(gopath, pathSep) {
+		if fn != "" {
+			fn := filepath.Join(fn, "src")
+			if fi, err := os.Stat(fn); err == nil && fi.IsDir() {
+				dirs = append(dirs, fn)
+			}
+		}
+	}
+
+	goroot := runtime.GOROOT()
+	if len(env) > 0 && env["GOROOT"] != "" {
+		goroot = env["GOROOT"]
+	} else if fn := os.Getenv("GOROOT"); fn != "" {
+		goroot = fn
+	}
+	goroot = filepath.Join(goroot, "src", "pkg")
+	if fi, err := os.Stat(goroot); err == nil && fi.IsDir() {
+		dirs = append(dirs, goroot)
+	}
+
+	return dirs
+}
+
+func fiHasGoExt(fi os.FileInfo) bool {
+	return strings.HasSuffix(fi.Name(), ".go")
+}
+
+func parsePkg(fset *token.FileSet, srcDir string, mode parser.Mode) (pkg *ast.Package, err error) {
+	pkgs := map[string]*ast.Package{}
+	if pkgs, err = parser.ParseDir(fset, srcDir, fiHasGoExt, mode); err == nil {
+		pkgName := path.Base(srcDir)
+		// we aren't going to support package whose name don't match the directory unless it's main
+		p, ok := pkgs[pkgName]
+		if !ok {
+			p, ok = pkgs["main"]
+		}
+		if ok {
+			pkg, err = ast.NewPackage(fset, p.Files, nil, nil)
+			return
+		}
+	}
+	return
+}
+
+func findPkg(fset *token.FileSet, importPath string, dirs []string, mode parser.Mode) (pkg *ast.Package, err error) {
+	for _, dir := range dirs {
+		srcDir := filepath.Join(dir, importPath)
+		if pkg, err = parsePkg(fset, srcDir, mode); pkg != nil {
+			return
+		}
 	}
 	return
 }
