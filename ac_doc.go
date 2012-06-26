@@ -1,21 +1,17 @@
 package main
 
 import (
-	"bytes"
-	"errors"
+	"go/ast"
 	"go/doc"
 	"go/parser"
-	"go/printer"
 	"go/token"
-	"os"
 	"path"
 	"path/filepath"
-	"runtime"
-	"strings"
 )
 
 type Doc struct {
 	Decl     string `json:"decl"`
+	Src      string `json:"src"`
 	Synopsis string `json:"synopsis"`
 	Name     string `json:"name"`
 	Doc      string `json:"doc"`
@@ -25,10 +21,13 @@ type Doc struct {
 }
 
 type DocArgs struct {
-	Fn   string            `json:"fn"`
-	Src  string            `json:"src"`
-	Expr string            `json:"expr"`
-	Env  map[string]string `json:"env"`
+	Fn        string            `json:"fn"`
+	Src       string            `json:"src"`
+	Expr      string            `json:"expr"`
+	Env       map[string]string `json:"env"`
+	Offset    int               `json:"offset"`
+	TabIndent bool              `json:"tab_indent"`
+	TabWidth  int               `json:"tab_width"`
 }
 
 func init() {
@@ -44,93 +43,124 @@ func init() {
 				return res, err
 			}
 
-			parts := strings.Split(strings.TrimSpace(a.Expr), ".")
-			if len(parts) < 2 {
-				return res, errors.New("N/I: cannot decode expression: expect pkg.Func")
-			}
-
-			fset, af, err := parseAstFile(a.Fn, a.Src, parser.ImportsOnly)
+			fset, af, err := parseAstFile(a.Fn, a.Src, parser.ParseComments)
 			if err != nil {
 				return res, err
 			}
 
-			pkgPath := ""
-			pattern := parts[1]
+			sel, id := identAt(fset, af, a.Offset)
 
-			for _, im := range af.Imports {
-				if im.Name != nil && parts[0] == im.Name.Name {
-					pkgPath = unquote(im.Path.Value)
-					break
+			pkg, err := parsePkg(fset, filepath.Dir(a.Fn), parser.ParseComments)
+			if pkg == nil {
+				return nil, err
+			}
+
+			obj := findUnderlyingObj(fset, af, pkg, rootDirs(a.Env), sel, id)
+			if obj != nil {
+				declSrc := "" // todo: print the declaration
+				objSrc, _ := printSrc(fset, obj.Decl, a.TabIndent, a.TabWidth)
+				docText := "no docs found for " + obj.Kind.String()
+				switch v := obj.Decl.(type) {
+				case *ast.FuncDecl:
+					docText = v.Doc.Text()
+				default:
+					// todo: collect doc for other types as well
 				}
-			}
-			if pkgPath == "" {
-				for _, im := range af.Imports {
-					imPath := unquote(im.Path.Value)
-					if parts[0] == path.Base(imPath) {
-						pkgPath = imPath
-						break
-					}
-				}
-			}
 
-			if pkgPath == "" || pattern == "" {
-				return res, errors.New("N/I: cannot find package import")
-			}
-
-			paths := map[string]bool{}
-			env := []string{
-				a.Env["GOPATH"],
-				a.Env["GOROOT"],
-				os.Getenv("GOPATH"),
-				os.Getenv("GOROOT"),
-				runtime.GOROOT(),
-			}
-			for _, ent := range env {
-				for _, path := range filepath.SplitList(ent) {
-					if path != "" {
-						paths[filepath.Join(path, "src", "pkg")] = true
-					}
-				}
-			}
-
-			for root, _ := range paths {
-				dpath := filepath.Join(root, pkgPath)
-				st, err := os.Stat(dpath)
-				if err == nil && st.IsDir() {
-					docs := findDocs(fset, root, dpath, pkgPath, pattern)
-					if len(docs) > 0 {
-						res = docs
-						break
-					}
-				}
-			}
-
-			return res, nil
-		},
-	})
-}
-
-func findDocs(fset *token.FileSet, root, dpath, importPath, pat string) (docs []*Doc) {
-	pkgs, _ := parser.ParseDir(fset, dpath, nil, parser.ParseComments)
-	buf := bytes.NewBuffer(nil)
-	for _, pkg := range pkgs {
-		pd := doc.New(pkg, importPath, 0)
-		for _, v := range pd.Funcs {
-			if pat == v.Name {
-				tp := fset.Position(v.Decl.Pos())
-				buf.Reset()
-				printer.Fprint(buf, fset, v.Decl.Type)
-				docs = append(docs, &Doc{
-					Decl:     buf.String(),
-					Name:     v.Name,
-					Doc:      v.Doc,
-					Synopsis: doc.Synopsis(v.Doc),
+				tp := fset.Position(obj.Pos())
+				res = append(res, &Doc{
+					Decl:     declSrc,
+					Src:      objSrc,
+					Name:     obj.Name,
+					Doc:      docText,
+					Synopsis: doc.Synopsis(docText),
 					Fn:       tp.Filename,
 					Row:      tp.Line - 1,
 					Col:      tp.Column - 1,
 				})
 			}
+			return res, nil
+		},
+	})
+}
+
+func isBetween(n, start, end int) bool {
+	return (n >= start && n <= end)
+}
+
+func identAt(fset *token.FileSet, af *ast.File, offset int) (sel *ast.SelectorExpr, id *ast.Ident) {
+	ast.Inspect(af, func(n ast.Node) bool {
+		if n != nil {
+			start := fset.Position(n.Pos())
+			end := fset.Position(n.End())
+			if isBetween(offset, start.Offset, end.Offset) {
+				switch v := n.(type) {
+				case *ast.SelectorExpr:
+					sel = v
+				case *ast.Ident:
+					id = v
+				}
+			}
+		}
+		return true
+	})
+	return
+}
+
+func findUnderlyingObj(fset *token.FileSet, af *ast.File, pkg *ast.Package, srcRootDirs []string, sel *ast.SelectorExpr, id *ast.Ident) *ast.Object {
+	if id != nil && id.Obj != nil {
+		return id.Obj
+	}
+
+	if id == nil {
+		// can this ever happen?
+		return nil
+	}
+
+	if sel == nil {
+		if obj := pkg.Scope.Lookup(id.Name); obj != nil {
+			return obj
 		}
 	}
-	return
+
+	if sel == nil {
+		return nil
+	}
+
+	switch x := sel.X.(type) {
+	case *ast.Ident:
+		if x.Obj != nil {
+			// todo: resolve type
+		} else {
+			if v := pkg.Scope.Lookup(id.Name); v != nil {
+				// todo: found a type?
+			} else {
+				// it's most likely a package
+				// todo: handle .dot imports
+				for _, ispec := range af.Imports {
+					importPath := unquote(ispec.Path.Value)
+					pkgAlias := ""
+					if ispec.Name == nil {
+						pkgAlias = path.Base(importPath)
+					} else {
+						pkgAlias = ispec.Name.Name
+					}
+					if pkgAlias == x.Name {
+						if id == x {
+							// where do we go as the first place of a package?
+							return nil
+						}
+
+						if p, _ := findPkg(fset, importPath, srcRootDirs, parser.ParseComments); p != nil {
+							if obj := p.Scope.Lookup(id.Name); obj != nil {
+								return obj
+							}
+							return nil
+						}
+					}
+				}
+			}
+		}
+	}
+	return nil
 }
