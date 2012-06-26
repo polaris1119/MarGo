@@ -85,6 +85,7 @@ func importPaths(environ map[string]string) ([]string, error) {
 		}
 	}
 
+	seen := map[string]bool{}
 	pfx := strings.HasPrefix
 	sfx := strings.HasSuffix
 	osArch := runtime.GOOS + "_" + runtime.GOARCH
@@ -97,7 +98,10 @@ func importPaths(environ map[string]string) ([]string, error) {
 					p := p[:len(p)-2]
 					if !pfx(p, ".") && !pfx(p, "_") && !sfx(p, "_test") {
 						p = path.Clean(filepath.ToSlash(p))
-						imports = append(imports, p)
+						if !seen[p] {
+							seen[p] = true
+							imports = append(imports, p)
+						}
 					}
 				}
 			}
