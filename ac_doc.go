@@ -113,8 +113,6 @@ func findUnderlyingObj(fset *token.FileSet, af *ast.File, pkg *ast.Package, srcR
 			if obj := pkgBuiltin.Scope.Lookup(id.Name); obj != nil {
 				return obj
 			}
-		} else {
-			panic(err)
 		}
 	}
 
