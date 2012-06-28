@@ -2,7 +2,6 @@ package main
 
 import (
 	"go/ast"
-	"go/doc"
 	"go/parser"
 	"go/token"
 	"path"
@@ -10,14 +9,11 @@ import (
 )
 
 type Doc struct {
-	Decl     string `json:"decl"`
-	Src      string `json:"src"`
-	Synopsis string `json:"synopsis"`
-	Name     string `json:"name"`
-	Doc      string `json:"doc"`
-	Fn       string `json:"fn"`
-	Row      int    `json:"row"`
-	Col      int    `json:"col"`
+	Src  string `json:"src"`
+	Name string `json:"name"`
+	Fn   string `json:"fn"`
+	Row  int    `json:"row"`
+	Col  int    `json:"col"`
 }
 
 type DocArgs struct {
@@ -57,26 +53,14 @@ func init() {
 
 			obj := findUnderlyingObj(fset, af, pkg, rootDirs(a.Env), sel, id)
 			if obj != nil {
-				declSrc := "" // todo: print the declaration
 				objSrc, _ := printSrc(fset, obj.Decl, a.TabIndent, a.TabWidth)
-				docText := "no docs found for " + obj.Kind.String()
-				switch v := obj.Decl.(type) {
-				case *ast.FuncDecl:
-					docText = v.Doc.Text()
-				default:
-					// todo: collect doc for other types as well
-				}
-
 				tp := fset.Position(obj.Pos())
 				res = append(res, &Doc{
-					Decl:     declSrc,
-					Src:      objSrc,
-					Name:     obj.Name,
-					Doc:      docText,
-					Synopsis: doc.Synopsis(docText),
-					Fn:       tp.Filename,
-					Row:      tp.Line - 1,
-					Col:      tp.Column - 1,
+					Src:  objSrc,
+					Name: obj.Name,
+					Fn:   tp.Filename,
+					Row:  tp.Line - 1,
+					Col:  tp.Column - 1,
 				})
 			}
 			return res, nil
