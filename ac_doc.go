@@ -6,11 +6,13 @@ import (
 	"go/token"
 	"path"
 	"path/filepath"
+	"runtime"
 )
 
 type Doc struct {
 	Src  string `json:"src"`
 	Name string `json:"name"`
+	Kind string `json:"kind"`
 	Fn   string `json:"fn"`
 	Row  int    `json:"row"`
 	Col  int    `json:"col"`
@@ -58,6 +60,7 @@ func init() {
 				res = append(res, &Doc{
 					Src:  objSrc,
 					Name: obj.Name,
+					Kind: obj.Kind.String(),
 					Fn:   tp.Filename,
 					Row:  tp.Line - 1,
 					Col:  tp.Column - 1,
@@ -104,6 +107,14 @@ func findUnderlyingObj(fset *token.FileSet, af *ast.File, pkg *ast.Package, srcR
 	if sel == nil {
 		if obj := pkg.Scope.Lookup(id.Name); obj != nil {
 			return obj
+		}
+		fn := filepath.Join(runtime.GOROOT(), "src", "pkg", "builtin")
+		if pkgBuiltin, err := parsePkg(fset, fn, parser.ParseComments); err == nil {
+			if obj := pkgBuiltin.Scope.Lookup(id.Name); obj != nil {
+				return obj
+			}
+		} else {
+			panic(err)
 		}
 	}
 
