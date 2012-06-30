@@ -7,6 +7,7 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 type Doc struct {
@@ -48,27 +49,47 @@ func init() {
 
 			sel, id := identAt(fset, af, a.Offset)
 
-			pkg, err := parsePkg(fset, filepath.Dir(a.Fn), parser.ParseComments)
+			pkg, pkgs, err := parsePkg(fset, filepath.Dir(a.Fn), parser.ParseComments)
 			if pkg == nil {
 				return nil, err
 			}
 
-			obj := findUnderlyingObj(fset, af, pkg, rootDirs(a.Env), sel, id)
+			obj, _, objPkgs := findUnderlyingObj(fset, af, pkg, pkgs, rootDirs(a.Env), sel, id)
 			if obj != nil {
-				objSrc, _ := printSrc(fset, obj.Decl, a.TabIndent, a.TabWidth)
-				tp := fset.Position(obj.Pos())
-				res = append(res, &Doc{
-					Src:  objSrc,
-					Name: obj.Name,
-					Kind: obj.Kind.String(),
-					Fn:   tp.Filename,
-					Row:  tp.Line - 1,
-					Col:  tp.Column - 1,
-				})
+				res = append(res, objDoc(fset, a.TabIndent, a.TabWidth, obj))
+				if objPkgs != nil {
+					xName := "Example" + obj.Name
+					xPrefix := xName + "_"
+					for _, objPkg := range objPkgs {
+						xPkg, _ := ast.NewPackage(fset, objPkg.Files, nil, nil)
+						if xPkg == nil || xPkg.Scope == nil {
+							continue
+						}
+
+						for _, xObj := range xPkg.Scope.Objects {
+							if xObj.Name == xName || strings.HasPrefix(xObj.Name, xPrefix) {
+								res = append(res, objDoc(fset, a.TabIndent, a.TabWidth, xObj))
+							}
+						}
+					}
+				}
 			}
 			return res, nil
 		},
 	})
+}
+
+func objDoc(fset *token.FileSet, tabIndent bool, tabWidth int, obj *ast.Object) *Doc {
+	objSrc, _ := printSrc(fset, obj.Decl, tabIndent, tabWidth)
+	tp := fset.Position(obj.Pos())
+	return &Doc{
+		Src:  objSrc,
+		Name: obj.Name,
+		Kind: obj.Kind.String(),
+		Fn:   tp.Filename,
+		Row:  tp.Line - 1,
+		Col:  tp.Column - 1,
+	}
 }
 
 func isBetween(n, start, end int) bool {
@@ -94,30 +115,30 @@ func identAt(fset *token.FileSet, af *ast.File, offset int) (sel *ast.SelectorEx
 	return
 }
 
-func findUnderlyingObj(fset *token.FileSet, af *ast.File, pkg *ast.Package, srcRootDirs []string, sel *ast.SelectorExpr, id *ast.Ident) *ast.Object {
+func findUnderlyingObj(fset *token.FileSet, af *ast.File, pkg *ast.Package, pkgs map[string]*ast.Package, srcRootDirs []string, sel *ast.SelectorExpr, id *ast.Ident) (*ast.Object, *ast.Package, map[string]*ast.Package) {
 	if id != nil && id.Obj != nil {
-		return id.Obj
+		return id.Obj, pkg, pkgs
 	}
 
 	if id == nil {
 		// can this ever happen?
-		return nil
+		return nil, pkg, pkgs
 	}
 
 	if sel == nil {
 		if obj := pkg.Scope.Lookup(id.Name); obj != nil {
-			return obj
+			return obj, pkg, pkgs
 		}
 		fn := filepath.Join(runtime.GOROOT(), "src", "pkg", "builtin")
-		if pkgBuiltin, err := parsePkg(fset, fn, parser.ParseComments); err == nil {
+		if pkgBuiltin, _, err := parsePkg(fset, fn, parser.ParseComments); err == nil {
 			if obj := pkgBuiltin.Scope.Lookup(id.Name); obj != nil {
-				return obj
+				return obj, pkgBuiltin, pkgs
 			}
 		}
 	}
 
 	if sel == nil {
-		return nil
+		return nil, pkg, pkgs
 	}
 
 	switch x := sel.X.(type) {
@@ -141,19 +162,20 @@ func findUnderlyingObj(fset *token.FileSet, af *ast.File, pkg *ast.Package, srcR
 					if pkgAlias == x.Name {
 						if id == x {
 							// where do we go as the first place of a package?
-							return nil
+							return nil, pkg, pkgs
 						}
 
-						if p, _ := findPkg(fset, importPath, srcRootDirs, parser.ParseComments); p != nil {
+						var p *ast.Package
+						if p, pkgs, _ = findPkg(fset, importPath, srcRootDirs, parser.ParseComments); p != nil {
 							if obj := p.Scope.Lookup(id.Name); obj != nil {
-								return obj
+								return obj, pkg, pkgs
 							}
-							return nil
+							return nil, pkg, pkgs
 						}
 					}
 				}
 			}
 		}
 	}
-	return nil
+	return nil, pkg, pkgs
 }

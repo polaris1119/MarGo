@@ -26,7 +26,7 @@ func init() {
 
 			fset, _, err := parseAstFile(a.Fn, a.Src, 0)
 			if err == nil {
-				pkg, err := parsePkg(fset, filepath.Dir(a.Fn), 0)
+				pkg, _, err := parsePkg(fset, filepath.Dir(a.Fn), 0)
 				if pkg == nil {
 					return decls, err
 				}
