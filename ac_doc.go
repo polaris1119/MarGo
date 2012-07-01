@@ -167,10 +167,8 @@ func findUnderlyingObj(fset *token.FileSet, af *ast.File, pkg *ast.Package, pkgs
 
 						var p *ast.Package
 						if p, pkgs, _ = findPkg(fset, importPath, srcRootDirs, parser.ParseComments); p != nil {
-							if obj := p.Scope.Lookup(id.Name); obj != nil {
-								return obj, pkg, pkgs
-							}
-							return nil, pkg, pkgs
+							obj := p.Scope.Lookup(id.Name)
+							return obj, pkg, pkgs
 						}
 					}
 				}
