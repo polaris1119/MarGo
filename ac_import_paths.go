@@ -39,28 +39,31 @@ func init() {
 				return res, err
 			}
 
+			res.Paths, _ = importPaths(a.Env)
+
 			_, af, err := parseAstFile(a.Fn, a.Src, parser.ImportsOnly)
 			if err != nil {
 				return res, err
 			}
 
-			for _, decl := range af.Decls {
-				if gdecl, ok := decl.(*ast.GenDecl); ok && len(gdecl.Specs) > 0 {
-					for _, spec := range gdecl.Specs {
-						if ispec, ok := spec.(*ast.ImportSpec); ok {
-							sd := ImportDecl{
-								Path: unquote(ispec.Path.Value),
+			if a.Fn != "" || a.Src != "" {
+				for _, decl := range af.Decls {
+					if gdecl, ok := decl.(*ast.GenDecl); ok && len(gdecl.Specs) > 0 {
+						for _, spec := range gdecl.Specs {
+							if ispec, ok := spec.(*ast.ImportSpec); ok {
+								sd := ImportDecl{
+									Path: unquote(ispec.Path.Value),
+								}
+								if ispec.Name != nil {
+									sd.Name = ispec.Name.String()
+								}
+								res.Imports = append(res.Imports, sd)
 							}
-							if ispec.Name != nil {
-								sd.Name = ispec.Name.String()
-							}
-							res.Imports = append(res.Imports, sd)
 						}
 					}
 				}
 			}
 
-			res.Paths, _ = importPaths(a.Env)
 			return res, nil
 		},
 	})
