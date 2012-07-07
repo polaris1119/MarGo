@@ -5,12 +5,29 @@ import (
 	"fmt"
 	"go/ast"
 	"go/printer"
-	"path/filepath"
+	"go/token"
+	"os"
 )
 
 type DeclarationsArgs struct {
-	Fn  string `json:"filename"`
-	Src string `json:"src"`
+	Fn     string            `json:"filename"`
+	Src    string            `json:"src"`
+	PkgDir string            `json:"pkg_dir"`
+	Env    map[string]string `json:"env"`
+}
+
+type DeclarationsRes struct {
+	FileDecls []*Decl `json:"file_decls"`
+	PkgDecls  []*Decl `json:"pkg_decls"`
+}
+
+type Decl struct {
+	Name string `json:"name"`
+	Repr string `json:"repr"`
+	Kind string `json:"kind"`
+	Fn   string `json:"fn"`
+	Row  int    `json:"row"`
+	Col  int    `json:"col"`
 }
 
 func init() {
@@ -19,95 +36,101 @@ func init() {
 		Doc:  "",
 		Func: func(r Request) (data, error) {
 			a := DeclarationsArgs{}
-			decls := []map[string]interface{}{}
-			if err := r.Decode(&a); err != nil {
-				return decls, err
+			res := DeclarationsRes{
+				FileDecls: []*Decl{},
+				PkgDecls:  []*Decl{},
 			}
 
-			fset, _, err := parseAstFile(a.Fn, a.Src, 0)
-			if err == nil {
-				pkg, _, err := parsePkg(fset, filepath.Dir(a.Fn), 0)
-				if pkg == nil {
-					return decls, err
+			if err := r.Decode(&a); err != nil {
+				return res, err
+			}
+
+			if fset, af, err := parseAstFile(a.Fn, a.Src, 0); err == nil {
+				res.FileDecls = collectDecls(fset, af, res.FileDecls)
+			}
+
+			fset := token.NewFileSet()
+			if a.PkgDir != "" {
+				var pkgs map[string]*ast.Package
+
+				if fi, err := os.Stat(a.PkgDir); err == nil && fi.IsDir() {
+					_, pkgs, _ = parsePkg(fset, a.PkgDir, 0)
+				} else {
+					_, pkgs, _ = findPkg(fset, a.PkgDir, rootDirs(a.Env), 0)
 				}
 
-				for _, af := range pkg.Files {
-					for _, d := range af.Decls {
-						if p := fset.Position(d.Pos()); p.IsValid() {
-							switch n := d.(type) {
-							case *ast.FuncDecl:
-								if n.Name.Name != "_" {
-									decl := map[string]interface{}{
-										"name":     n.Name.Name,
-										"kind":     "func",
-										"doc":      n.Doc.Text(),
-										"filename": p.Filename,
-										"line":     p.Line,
-										"column":   p.Column,
-									}
-									if n.Recv != nil {
-										recvFields := n.Recv.List
-										if len(recvFields) == 0 {
-											break
-										}
-										typ := recvFields[0].Type
-										buf := bytes.NewBuffer([]byte("("))
-										if printer.Fprint(buf, fset, typ) != nil {
-											break
-										}
-										fmt.Fprintf(buf, ").%s", n.Name.Name)
-										decl["name"] = buf.String()
-									}
-									decls = append(decls, decl)
-								}
-							case *ast.GenDecl:
-								for _, spec := range n.Specs {
-									switch gn := spec.(type) {
-									case *ast.TypeSpec:
-										if vp := fset.Position(gn.Pos()); gn.Name.Name != "_" && vp.IsValid() {
-											decls = append(decls, map[string]interface{}{
-												"name":     gn.Name.Name,
-												"kind":     "type",
-												"doc":      gn.Doc.Text(),
-												"filename": vp.Filename,
-												"line":     vp.Line,
-												"column":   vp.Column,
-											})
-										}
-									case *ast.ValueSpec:
-										for _, v := range gn.Names {
-											if vp := fset.Position(v.Pos()); v.Name != "_" && vp.IsValid() {
-												kind := ""
-												switch v.Obj.Kind {
-												case ast.Typ:
-													kind = "type"
-												case ast.Fun:
-													kind = "func"
-												case ast.Con:
-													kind = "const"
-												case ast.Var:
-													kind = "var"
-												default:
-													continue
-												}
-												decls = append(decls, map[string]interface{}{
-													"name":     v.Name,
-													"kind":     kind,
-													"doc":      "",
-													"filename": vp.Filename,
-													"line":     vp.Line,
-													"column":   vp.Column,
-												})
-											}
-										}
-									}
+				for _, pkg := range pkgs {
+					for _, af := range pkg.Files {
+						res.PkgDecls = collectDecls(fset, af, res.PkgDecls)
+					}
+				}
+			}
+
+			return res, nil
+		},
+	})
+}
+
+func collectDecls(fset *token.FileSet, af *ast.File, decls []*Decl) []*Decl {
+	for _, fdecl := range af.Decls {
+		if tp := fset.Position(fdecl.Pos()); tp.IsValid() {
+			switch n := fdecl.(type) {
+			case *ast.FuncDecl:
+				if n.Name.Name != "_" {
+					d := &Decl{
+						Name: n.Name.Name,
+						Kind: "func",
+						Fn:   tp.Filename,
+						Row:  tp.Line - 1,
+						Col:  tp.Column - 1,
+					}
+
+					if n.Recv != nil {
+						recvFields := n.Recv.List
+						if len(recvFields) > 0 {
+							typ := recvFields[0].Type
+							buf := bytes.NewBufferString("(")
+							if printer.Fprint(buf, fset, typ) == nil {
+								fmt.Fprintf(buf, ").%s", n.Name.Name)
+								d.Repr = buf.String()
+							}
+						}
+					}
+
+					decls = append(decls, d)
+				}
+			case *ast.GenDecl:
+				for _, spec := range n.Specs {
+					switch gn := spec.(type) {
+					case *ast.TypeSpec:
+						if tp := fset.Position(gn.Pos()); gn.Name.Name != "_" && tp.IsValid() {
+							decls = append(decls, &Decl{
+								Name: gn.Name.Name,
+								Kind: "type",
+								Fn:   tp.Filename,
+								Row:  tp.Line - 1,
+								Col:  tp.Column - 1,
+							})
+						}
+					case *ast.ValueSpec:
+						for _, v := range gn.Names {
+							if vp := fset.Position(v.Pos()); v.Name != "_" && vp.IsValid() {
+								switch v.Obj.Kind {
+								case ast.Typ, ast.Fun, ast.Con, ast.Var:
+									decls = append(decls, &Decl{
+										Name: v.Name,
+										Kind: v.Obj.Kind.String(),
+										Fn:   vp.Filename,
+										Row:  vp.Line - 1,
+										Col:  vp.Column - 1,
+									})
 								}
 							}
 						}
 					}
 				}
 			}
-			return decls, err
-		},
-	})
+		}
+	}
+	return decls
 }
