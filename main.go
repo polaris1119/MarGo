@@ -214,7 +214,6 @@ func parsePkg(fset *token.FileSet, srcDir string, mode parser.Mode) (pkg *ast.Pa
 		}
 		if ok {
 			pkg, err = ast.NewPackage(fset, p.Files, nil, nil)
-			return
 		}
 	}
 	return
@@ -302,6 +301,7 @@ func main() {
 
 		go func() {
 			importPaths(map[string]string{})
+			pkgDirs(nil)
 		}()
 
 		err = http.Serve(acListener, http.HandlerFunc(serve))
