@@ -7,11 +7,13 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 )
 
 type Doc struct {
 	Src  string `json:"src"`
+	Pkg  string `json:"pkg"`
 	Name string `json:"name"`
 	Kind string `json:"kind"`
 	Fn   string `json:"fn"`
@@ -54,9 +56,9 @@ func init() {
 				return nil, err
 			}
 
-			obj, _, objPkgs := findUnderlyingObj(fset, af, pkg, pkgs, rootDirs(a.Env), sel, id)
+			obj, pkg, objPkgs := findUnderlyingObj(fset, af, pkg, pkgs, rootDirs(a.Env), sel, id)
 			if obj != nil {
-				res = append(res, objDoc(fset, a.TabIndent, a.TabWidth, obj))
+				res = append(res, objDoc(fset, pkg, a.TabIndent, a.TabWidth, obj))
 				if objPkgs != nil {
 					xName := "Example" + obj.Name
 					xPrefix := xName + "_"
@@ -68,7 +70,7 @@ func init() {
 
 						for _, xObj := range xPkg.Scope.Objects {
 							if xObj.Name == xName || strings.HasPrefix(xObj.Name, xPrefix) {
-								res = append(res, objDoc(fset, a.TabIndent, a.TabWidth, xObj))
+								res = append(res, objDoc(fset, xPkg, a.TabIndent, a.TabWidth, xObj))
 							}
 						}
 					}
@@ -79,13 +81,55 @@ func init() {
 	})
 }
 
-func objDoc(fset *token.FileSet, tabIndent bool, tabWidth int, obj *ast.Object) *Doc {
-	objSrc, _ := printSrc(fset, obj.Decl, tabIndent, tabWidth)
+func objDoc(fset *token.FileSet, pkg *ast.Package, tabIndent bool, tabWidth int, obj *ast.Object) *Doc {
+	decl := obj.Decl
+	kind := obj.Kind.String()
 	tp := fset.Position(obj.Pos())
+	objSrc := ""
+	pkgName := ""
+	if pkg != nil && pkg.Name != "builtin" {
+		pkgName = pkg.Name
+	}
+
+	if obj.Kind == ast.Pkg {
+		pkgName = ""
+		doc := ""
+		// special-case `package name` is generated as a TypeSpec
+		if v, ok := obj.Decl.(*ast.TypeSpec); ok && v.Doc != nil {
+			doc = "/*\n" + v.Doc.Text() + "\n*/\n"
+		}
+		objSrc = doc + "package " + obj.Name
+	} else if af, ok := pkg.Files[tp.Filename]; ok {
+		switch decl.(type) {
+		case *ast.TypeSpec, *ast.ValueSpec, *ast.Field:
+			line := tp.Line - 1
+			for _, cg := range af.Comments {
+				cgp := fset.Position(cg.End())
+				if cgp.Filename == tp.Filename && cgp.Line == line {
+					switch v := decl.(type) {
+					case *ast.TypeSpec:
+						v.Doc = cg
+					case *ast.ValueSpec:
+						v.Doc = cg
+					case *ast.Field:
+						pkgName = ""
+						kind = "field"
+					}
+					break
+				}
+			}
+		}
+	}
+
+	if objSrc == "" {
+		objSrc, _ = printSrc(fset, decl, tabIndent, tabWidth)
+	}
+
 	return &Doc{
 		Src:  objSrc,
+		Pkg:  pkgName,
 		Name: obj.Name,
-		Kind: obj.Kind.String(),
+		Kind: kind,
 		Fn:   tp.Filename,
 		Row:  tp.Line - 1,
 		Col:  tp.Column - 1,
@@ -162,12 +206,60 @@ func findUnderlyingObj(fset *token.FileSet, af *ast.File, pkg *ast.Package, pkgs
 					if pkgAlias == x.Name {
 						if id == x {
 							// where do we go as the first place of a package?
+							pkg, pkgs, _ = findPkg(fset, importPath, srcRootDirs, parser.ParseComments|parser.PackageClauseOnly)
+							if pkg != nil {
+								// we'll just match the behaviour of package browsing
+								// we will visit some file within the package
+								// but which file, or where is undefined
+								var f *ast.File
+								ok := false
+								if len(pkg.Files) > 0 {
+									basedir := ""
+									for fn, _ := range pkg.Files {
+										basedir = filepath.Dir(fn)
+										break
+									}
+									baseFn := func(fn string) string {
+										return filepath.Join(basedir, fn)
+									}
+									if f, ok = pkg.Files[baseFn("doc.go")]; !ok {
+										if f, ok = pkg.Files[baseFn("main.go")]; !ok {
+											if f, ok = pkg.Files[baseFn(pkgAlias+".go")]; !ok {
+												// try to keep things consistent
+												filenames := sort.StringSlice{}
+												for filename, _ := range pkg.Files {
+													filenames = append(filenames, filename)
+												}
+												sort.Sort(filenames)
+												f = pkg.Files[filenames[0]]
+											}
+										}
+									}
+								}
+
+								if f != nil && f.Name != nil {
+									doc := f.Doc
+									if len(f.Comments) > 0 && f.Doc == nil {
+										doc = f.Comments[len(f.Comments)-1]
+									}
+									o := &ast.Object{
+										Kind: ast.Pkg,
+										Name: f.Name.Name,
+										Decl: &ast.TypeSpec{
+											Name: f.Name,
+											Doc:  doc,
+											Type: f.Name,
+										},
+									}
+									return o, pkg, pkgs
+								}
+							}
+							// in-case we don't find a pkg decl
 							return nil, pkg, pkgs
 						}
 
-						var p *ast.Package
-						if p, pkgs, _ = findPkg(fset, importPath, srcRootDirs, parser.ParseComments); p != nil {
-							obj := p.Scope.Lookup(id.Name)
+						if pkg, pkgs, _ = findPkg(fset, importPath, srcRootDirs, parser.ParseComments); pkg != nil {
+							obj := pkg.Scope.Lookup(id.Name)
 							return obj, pkg, pkgs
 						}
 					}
