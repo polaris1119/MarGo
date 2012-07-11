@@ -1,6 +1,7 @@
 package main
 
 import (
+	"go/ast"
 	"go/parser"
 )
 
@@ -32,6 +33,7 @@ formats the source like gofmt does
 
 			fset, af, err := parseAstFile(a.Fn, a.Src, parser.ParseComments)
 			if err == nil {
+				ast.SortImports(fset, af)
 				res, err = printSrc(fset, af, a.TabIndent, a.TabWidth)
 			}
 			return res, err
