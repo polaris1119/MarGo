@@ -199,7 +199,7 @@ func findUnderlyingObj(fset *token.FileSet, af *ast.File, pkg *ast.Package, pkgs
 					importPath := unquote(ispec.Path.Value)
 					pkgAlias := ""
 					if ispec.Name == nil {
-						pkgAlias = path.Base(importPath)
+						_, pkgAlias = path.Split(importPath)
 					} else {
 						pkgAlias = ispec.Name.Name
 					}

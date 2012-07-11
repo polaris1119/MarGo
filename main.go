@@ -206,7 +206,7 @@ func fiHasGoExt(fi os.FileInfo) bool {
 
 func parsePkg(fset *token.FileSet, srcDir string, mode parser.Mode) (pkg *ast.Package, pkgs map[string]*ast.Package, err error) {
 	if pkgs, err = parser.ParseDir(fset, srcDir, fiHasGoExt, mode); pkgs != nil {
-		pkgName := path.Base(srcDir)
+		_, pkgName := filepath.Split(srcDir)
 		// we aren't going to support package whose name don't match the directory unless it's main
 		p, ok := pkgs[pkgName]
 		if !ok {
