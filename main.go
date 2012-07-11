@@ -167,8 +167,6 @@ func printSrc(fset *token.FileSet, v interface{}, tabIndent bool, tabWidth int) 
 }
 
 func rootDirs(env map[string]string) []string {
-	const pathSep = string(os.PathListSeparator)
-
 	dirs := []string{}
 	gopath := ""
 	if len(env) == 0 {
@@ -177,7 +175,7 @@ func rootDirs(env map[string]string) []string {
 		gopath = env["GOPATH"]
 	}
 
-	for _, fn := range strings.Split(gopath, pathSep) {
+	for _, fn := range filepath.SplitList(gopath) {
 		if fn != "" {
 			fn := filepath.Join(fn, "src")
 			if fi, err := os.Stat(fn); err == nil && fi.IsDir() {
