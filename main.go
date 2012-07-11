@@ -175,8 +175,18 @@ func rootDirs(env map[string]string) []string {
 		gopath = env["GOPATH"]
 	}
 
+	goroot := runtime.GOROOT()
+	if len(env) > 0 && env["GOROOT"] != "" {
+		goroot = env["GOROOT"]
+	} else if fn := os.Getenv("GOROOT"); fn != "" {
+		goroot = fn
+	}
+	gorootSrc := filepath.Join(goroot, "src")
+	goroot = filepath.Join(gorootSrc, "pkg")
+
 	for _, fn := range filepath.SplitList(gopath) {
-		if fn != "" {
+		// goroot may be a part of gopath and we don't want that
+		if fn != "" && !strings.HasPrefix(fn, gorootSrc) {
 			fn := filepath.Join(fn, "src")
 			if fi, err := os.Stat(fn); err == nil && fi.IsDir() {
 				dirs = append(dirs, fn)
@@ -184,13 +194,6 @@ func rootDirs(env map[string]string) []string {
 		}
 	}
 
-	goroot := runtime.GOROOT()
-	if len(env) > 0 && env["GOROOT"] != "" {
-		goroot = env["GOROOT"]
-	} else if fn := os.Getenv("GOROOT"); fn != "" {
-		goroot = fn
-	}
-	goroot = filepath.Join(goroot, "src", "pkg")
 	if fi, err := os.Stat(goroot); err == nil && fi.IsDir() {
 		dirs = append(dirs, goroot)
 	}
