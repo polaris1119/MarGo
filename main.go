@@ -186,7 +186,6 @@ func rootDirs(env map[string]string) []string {
 	for _, fn := range filepath.SplitList(gopath) {
 		// goroot may be a part of gopath and we don't want that
 		if fn != "" && !strings.HasPrefix(fn, gorootBase) {
-			println(fn)
 			fn := filepath.Join(fn, "src")
 			if fi, err := os.Stat(fn); err == nil && fi.IsDir() {
 				dirs = append(dirs, fn)
