@@ -50,11 +50,27 @@ func init() {
 			}
 
 			sel, id := identAt(fset, af, a.Offset)
-
-			pkg, pkgs, err := parsePkg(fset, filepath.Dir(a.Fn), parser.ParseComments)
-			if pkg == nil {
-				return nil, err
+			if id == nil {
+				return res, nil
 			}
+
+			pkgs, _ := parser.ParseDir(fset, filepath.Dir(a.Fn), fiHasGoExt, parser.ParseComments)
+			if pkgs == nil {
+				pkgs = map[string]*ast.Package{}
+			}
+
+			pkgName := af.Name.Name
+			files := map[string]*ast.File{}
+			pkg, _ := pkgs[pkgName]
+			if pkg != nil {
+				files = pkg.Files
+			}
+			files[a.Fn] = af
+			pkg, _ = ast.NewPackage(fset, files, nil, nil)
+			if pkg == nil {
+				return res, nil
+			}
+			pkgs[pkg.Name] = pkg
 
 			obj, pkg, objPkgs := findUnderlyingObj(fset, af, pkg, pkgs, rootDirs(a.Env), sel, id)
 			if obj != nil {
