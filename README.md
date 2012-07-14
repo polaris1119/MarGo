@@ -1,11 +1,3 @@
-
-NOTICE
-------
-
-The project isn't dead, but there is a chance that I will become unresponsive for a little while take a brief hiatus to re-adjust to life.
-
-Note: if you've forked this project or are otherwise using it directly(not indirectly via GoSublime) then your tools will probably break when I return as there are uncommited changes related to the rpc and overall functionality.
-
 Intro
 -----
 
