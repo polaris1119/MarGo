@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 )
@@ -30,24 +31,41 @@ func pkgDirs(env map[string]string) map[string]map[string]string {
 	res := map[string]map[string]string{}
 	for _, root := range rootDirs(env) {
 		res[root] = map[string]string{}
-		filepath.Walk(root, func(fn string, fi os.FileInfo, err error) error {
-			if err == nil {
-				name := fi.Name()
-				if name[0] == '.' || name[0] == '_' {
-					if fi.IsDir() {
-						return filepath.SkipDir
-					}
-				} else if !fi.IsDir() && strings.HasSuffix(fn, ".go") {
-					if dir, err := filepath.Rel(root, filepath.Dir(fn)); err == nil {
-						dir = filepath.ToSlash(dir)
-						if _, ok := res[root][dir]; !ok {
-							res[root][dir] = fn
-						}
-					}
-				}
-			}
-			return nil
-		})
+		walkRootDir(root, res[root], root)
 	}
 	return res
+}
+
+func walkRootDir(root string, m map[string]string, basePath string) {
+	dir, err := os.Open(root)
+	if err != nil {
+		return
+	}
+
+	importPath, err := filepath.Rel(basePath, root)
+	if err != nil {
+		importPath = root
+	}
+	importPath = path.Clean(filepath.ToSlash(importPath))
+	idealName := path.Base(importPath) + ".go"
+
+	names, _ := dir.Readdirnames(-1)
+	for _, name := range names {
+		if name[0] == '.' || name[0] == '_' {
+			continue
+		}
+
+		fn := filepath.Join(root, name)
+		if strings.HasSuffix(name, ".go") {
+			oldFn, ok := m[importPath]
+			if ok {
+				ok = strings.HasSuffix(oldFn, idealName)
+			}
+			if name == idealName || (!ok && name == "main.go") {
+				m[importPath] = fn
+			}
+		} else if fi, err := os.Stat(fn); err == nil && fi.IsDir() {
+			walkRootDir(fn, m, basePath)
+		}
+	}
 }
