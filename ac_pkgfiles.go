@@ -15,7 +15,7 @@ func init() {
 		Path: "/pkgfiles",
 		Doc:  ``,
 		Func: func(r Request) (data, error) {
-			res := map[string][]string{}
+			res := map[string]map[string]string{}
 			a := PkgFilesArgs{}
 			if err := r.Decode(&a); err != nil {
 				return res, err
@@ -30,12 +30,12 @@ func init() {
 			pkgs, _ := parser.ParseDir(fset, srcDir, nil, parser.PackageClauseOnly)
 			if pkgs != nil {
 				for pkgName, pkg := range pkgs {
-					list := []string{}
+					list := map[string]string{}
 					for _, f := range pkg.Files {
 						tp := fset.Position(f.Pos())
 						fn, _ := filepath.Rel(srcDir, tp.Filename)
 						if fn != "" {
-							list = append(list, fn)
+							list[fn] = tp.Filename
 						}
 					}
 					if len(list) > 0 {
