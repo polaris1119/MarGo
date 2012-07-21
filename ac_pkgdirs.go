@@ -57,11 +57,12 @@ func walkRootDir(root string, m map[string]string, basePath string) {
 
 		fn := filepath.Join(root, name)
 		if strings.HasSuffix(name, ".go") {
+			isIdeal := false
 			oldFn, ok := m[importPath]
 			if ok {
-				ok = strings.HasSuffix(oldFn, idealName)
+				isIdeal = strings.HasSuffix(oldFn, idealName)
 			}
-			if name == idealName || (!ok && name == "main.go") {
+			if !ok || name == idealName || (!isIdeal && name == "main.go") {
 				m[importPath] = fn
 			}
 		} else if fi, err := os.Stat(fn); err == nil && fi.IsDir() {
