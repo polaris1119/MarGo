@@ -183,7 +183,13 @@ func rootDirs(env map[string]string) []string {
 	}
 	goroot := filepath.Join(gorootBase, "src", "pkg")
 
+	dirsSeen := map[string]bool{}
 	for _, fn := range filepath.SplitList(gopath) {
+		if dirsSeen[fn] {
+			continue
+		}
+		dirsSeen[fn] = true
+
 		// goroot may be a part of gopath and we don't want that
 		if fn != "" && !strings.HasPrefix(fn, gorootBase) {
 			fn := filepath.Join(fn, "src")
