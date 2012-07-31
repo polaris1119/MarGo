@@ -3,6 +3,7 @@ package main
 import (
 	"go/parser"
 	"go/token"
+	"os"
 	"path/filepath"
 )
 
@@ -33,6 +34,14 @@ func init() {
 					list := map[string]string{}
 					for _, f := range pkg.Files {
 						tp := fset.Position(f.Pos())
+						if !tp.IsValid() {
+							continue
+						}
+
+						if _, err := os.Stat(tp.Filename); err != nil {
+							continue
+						}
+
 						fn, _ := filepath.Rel(srcDir, tp.Filename)
 						if fn != "" {
 							list[fn] = tp.Filename
