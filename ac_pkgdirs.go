@@ -5,6 +5,12 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync"
+)
+
+var (
+	pkgDirsLck   = sync.RWMutex{}
+	pkgDirsCache = map[string]bool{}
 )
 
 type PkgDirsArgs struct {
@@ -22,6 +28,7 @@ func init() {
 			if err := r.Decode(&a); err != nil {
 				return map[string]map[string]string{}, err
 			}
+
 			return pkgDirs(a.Env), nil
 		},
 	})
@@ -41,6 +48,7 @@ func walkRootDir(root string, m map[string]string, basePath string) {
 	if err != nil {
 		return
 	}
+	defer dir.Close()
 
 	importPath, err := filepath.Rel(basePath, root)
 	if err != nil {
@@ -49,7 +57,7 @@ func walkRootDir(root string, m map[string]string, basePath string) {
 	importPath = path.Clean(filepath.ToSlash(importPath))
 	idealName := path.Base(importPath) + ".go"
 
-	names, _ := dir.Readdirnames(-1)
+	names, err := dir.Readdirnames(-1)
 	for _, name := range names {
 		if name[0] == '.' || name[0] == '_' {
 			continue
@@ -65,8 +73,24 @@ func walkRootDir(root string, m map[string]string, basePath string) {
 			if !ok || name == idealName || (!isIdeal && name == "main.go") {
 				m[importPath] = fn
 			}
-		} else if fi, err := os.Stat(fn); err == nil && fi.IsDir() {
-			walkRootDir(fn, m, basePath)
+		} else {
+			pkgDirsLck.RLock()
+			isDir, ok := pkgDirsCache[fn]
+			pkgDirsLck.RUnlock()
+
+			if ok {
+				if isDir {
+					walkRootDir(fn, m, basePath)
+				}
+			} else if fi, err := os.Stat(fn); err == nil {
+				pkgDirsLck.Lock()
+				pkgDirsCache[fn] = fi.IsDir()
+				pkgDirsLck.Unlock()
+
+				if fi.IsDir() {
+					walkRootDir(fn, m, basePath)
+				}
+			}
 		}
 	}
 }
