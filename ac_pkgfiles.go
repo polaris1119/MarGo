@@ -28,7 +28,7 @@ func init() {
 			}
 
 			fset := token.NewFileSet()
-			pkgs, _ := parser.ParseDir(fset, srcDir, nil, parser.PackageClauseOnly)
+			pkgs, _ := parser.ParseDir(fset, srcDir, isGoFile, parser.PackageClauseOnly)
 			if pkgs != nil {
 				for pkgName, pkg := range pkgs {
 					list := map[string]string{}

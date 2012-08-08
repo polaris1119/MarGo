@@ -210,6 +210,11 @@ func fiHasGoExt(fi os.FileInfo) bool {
 	return strings.HasSuffix(fi.Name(), ".go")
 }
 
+func isGoFile(fi os.FileInfo) bool {
+	fn := fi.Name()
+	return fn[0] != '.' && fn[0] != '_' && strings.HasSuffix(fn, ".go")
+}
+
 func parsePkg(fset *token.FileSet, srcDir string, mode parser.Mode) (pkg *ast.Package, pkgs map[string]*ast.Package, err error) {
 	if pkgs, err = parser.ParseDir(fset, srcDir, fiHasGoExt, mode); pkgs != nil {
 		_, pkgName := filepath.Split(srcDir)
