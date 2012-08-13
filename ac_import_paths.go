@@ -1,13 +1,13 @@
 package main
 
 import (
+	"go/ast"
+	"go/parser"
 	"os"
 	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
-	"go/parser"
-	"go/ast"
 )
 
 type ImportPathsArgs struct {
@@ -70,7 +70,9 @@ func init() {
 }
 
 func importPaths(environ map[string]string) ([]string, error) {
-	imports := []string{}
+	imports := []string{
+		"unsafe",
+	}
 	paths := map[string]bool{}
 
 	env := []string{
