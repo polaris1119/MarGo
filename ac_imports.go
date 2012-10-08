@@ -58,15 +58,27 @@ func init() {
 
 			fset, af, err := parseAstFile(a.Fn, a.Src, parser.ImportsOnly|parser.ParseComments)
 			if err == nil {
-				ast.Inspect(af, func(n ast.Node) bool {
-					if n != nil {
-						tp := fset.Position(n.End())
-						if tp.Line > res.LineRef {
-							res.LineRef = tp.Line
-						}
+				// we neither return, nor attempt the whole source because it likely contains
+				// syntax errors after the imports... as a result we need to tell the client
+				// which part of the original source we edited so they are able to patch their
+				// copy of the source...
+
+				// find the last line number before we edit anything so the client can use it as
+				// as reference as where to patch
+				res.LineRef = fset.Position(af.Name.End()).Line
+				if l := len(af.Decls); l > 0 {
+					res.LineRef = fset.Position(af.Decls[l-1].End()).Line
+				}
+
+				// trim trailing comments so they don't make the line ref incorrect
+				for i, c := range af.Comments {
+					cp := fset.Position(c.Pos())
+					if cp.Line > res.LineRef {
+						af.Comments = af.Comments[:i]
+						break
 					}
-					return true
-				})
+				}
+
 				af = imp(fset, af, a.Toggle)
 				res.Src, err = printSrc(fset, af, a.TabIndent, a.TabWidth)
 			}
